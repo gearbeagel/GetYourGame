@@ -1,0 +1,59 @@
+{% extends 'base_generic.html' %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+    <div class="home-container">
+        {% if user.is_authenticated %}
+            <h1>Hello!</h1> 
+                <p>You are logged in with Steam.</p>
+            <a href="{% url 'get_user_games' %}" class="btn btn-primary">See your games</a>
+            <a href="{% url 'recommend_view' %}" class="btn btn-primary">Get recommended games</a>
+        {% else %}
+            <h1>You are not logged in.</h1>
+            <p>Please log in with your Steam account to get game recommendations.</p>
+            <a href="{% url 'steam_login' %}" class="btn btn-secondary">Login with Steam</a>
+        {% endif %}
+    </div>
+
+    <style>
+        .home-container {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            min-height: calc(100vh - 150px);
+        }
+
+        .btn {
+            padding: 10px 20px;
+            font-size: 16px;
+            border-radius: 5px;
+            text-decoration: none;
+            margin-top: 20px;
+            display: inline-block;
+            cursor: pointer;
+        }
+
+        .btn-primary {
+            background-color: #2b6731;
+            color: white;
+        }
+        
+        .btn-secondary {
+            background-color: #2b3767;
+            color: white;
+        }
+
+
+        .btn-secondary:hover {
+            background-color: #181e44;
+        }
+
+        p {
+            font-size: 1.2em;
+            margin: 10px 0;
+        }
+    </style>
+{% endblock %}

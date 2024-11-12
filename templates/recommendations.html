@@ -1,0 +1,30 @@
+{% extends "base_generic.html" %}
+
+{% block title %}Game Recommendations{% endblock %}
+
+{% block content %}
+    <h2>Recommendations for Your Library</h2>
+    
+    <div style="text-align: center;">
+        <form method="get" action="{% url 'recommend_view' %}">
+            <button type="submit" class="btn btn-primary" style="border-radius: 5px;" name="generate_recommendations">Generate 5 Random Games</button>
+        </form>
+    </div>
+    
+    <ul>
+        {% if content_recommendations %}
+            <div class="recommendations-container">
+            {% for game in content_recommendations %}
+                <div class="recommendation-item">
+                    <h3>{{ game.name }}</h3>
+                    <div class="game-cover">
+                        <img src="{{ game.header_image }}" alt="{{ game.name }} Cover" class="cover-img">
+                    </div>
+                    <small><i>{{ game.short_description }}</i></small>
+                    <a href="https://store.steampowered.com/app/{{ game.AppID }}" target="_blank" class="btn btn-primary">View on Steam</a>
+                </div>
+            {% endfor %}
+            </div>
+        {% endif %}
+    </ul>
+{% endblock %}

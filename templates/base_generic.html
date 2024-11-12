@@ -1,0 +1,137 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Choose Your Game{% endblock %}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+        }
+
+        header {
+            background-color: #333;
+            color: #fff;
+            padding: 10px 0;
+            text-align: center;
+        }
+
+        nav ul {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        nav ul li {
+            display: inline;
+            margin-right: 20px;
+        }
+
+        nav ul li a {
+            color: #fff;
+            text-decoration: none;
+        }
+
+        h2 {
+            font-size: 2em;
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .recommendations-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            padding: 20px;
+        }
+
+        .recommendation-item {
+            display: flex;
+            flex-direction: column;
+            background-color: #fff;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            transition: box-shadow 0.3s ease;
+        }
+
+        .recommendation-item:hover {
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+        }
+
+        .recommendation-item h3 {
+            font-size: 1.5em;
+        }
+
+        .recommendation-item small {
+            font-size: 0.9em;
+            margin-bottom: 10px;
+        }
+
+        .game-cover {
+            text-align: center;
+            margin-bottom: 15px;
+        }
+
+        .cover-img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+        }
+
+        .recommendation-item .btn {
+            background-color: #195693;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 5px;
+            text-align: center;
+            bottom: 0;
+            width: 87%;
+            margin-top: auto;
+        }
+
+        .recommendation-item .btn:hover {
+            background-color: #103660;
+        }
+
+        button.btn.btn-primary {
+            background-color: #2c6531;
+            color: white;
+            border: none;
+            padding: 15px 32px;
+            text-align: center;
+            font-size: 16px;
+            cursor: pointer;
+            justify-content: center;
+        }
+
+        button.btn.btn-primary:hover {
+            background-color: #184419;
+        }
+    </style>
+</head>
+<body>
+<header>
+    <h1>Get Your Game<i>!!!</i></h1>
+    <nav>
+        <ul>
+            <li><a href="/">Home</a></li>
+            <li><a href="/user/games/">Your Games</a></li>
+            <li><a href="/user/recommendations">Get Game Recommendations</a></li>
+            <li><a href="/steam/logout/">Logout</a></li>
+        </ul>
+    </nav>
+</header>
+
+<main>
+    {% block content %}
+        <!-- Content goes here -->
+    {% endblock %}
+</main>
+</body>
+</html>
