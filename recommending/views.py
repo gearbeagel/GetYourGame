@@ -139,6 +139,13 @@ def get_user_games_data(steam_id):
     return []
 
 
+def analyze_review_sentiment(review_text):
+    if isinstance(review_text, str):
+        blob = TextBlob(review_text)
+        return blob.sentiment.polarity
+    return 0
+
+
 def parse_estimated_owners(owner_range):
     try:
         lower, upper = owner_range.split(' - ')

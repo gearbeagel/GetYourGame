@@ -121,9 +121,11 @@
     <nav>
         <ul>
             <li><a href="/">Home</a></li>
-            <li><a href="/user/games/">Your Games</a></li>
-            <li><a href="/user/recommendations">Get Game Recommendations</a></li>
-            <li><a href="/steam/logout/">Logout</a></li>
+            {% if request.user.is_authenticated %}
+                <li><a href="/user/games/">Your Games</a></li>
+                <li><a href="/user/recommendations">Get Game Recommendations</a></li>
+                <li><a href="/steam/logout/">Logout</a></li>
+            {% endif %}
         </ul>
     </nav>
 </header>
