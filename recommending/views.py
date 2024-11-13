@@ -1,5 +1,7 @@
 import logging
 from urllib.parse import urlencode
+
+import kagglehub
 from textblob import TextBlob
 import pandas as pd
 import torch
@@ -109,7 +111,15 @@ def get_user_games(request):
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-df = pd.read_csv('./data/games_may2024_cleaned.csv')
+path = kagglehub.dataset_download('artermiloff/steam-games-dataset')
+df = pd.read_csv(path + '/games_may2024_cleaned.csv')
+
+
+def analyze_review_sentiment(review_text):
+    if isinstance(review_text, str):
+        blob = TextBlob(review_text)
+        return blob.sentiment.polarity
+    return 0
 
 
 def get_user_games_data(steam_id):
@@ -127,13 +137,6 @@ def get_user_games_data(steam_id):
         user_games_data = response.json().get('response', {}).get('games', [])
         return [{'name': game['name'], 'appid': game['appid']} for game in user_games_data]
     return []
-
-
-def analyze_review_sentiment(review_text):
-    if isinstance(review_text, str):
-        blob = TextBlob(review_text)
-        return blob.sentiment.polarity
-    return 0
 
 
 def parse_estimated_owners(owner_range):
