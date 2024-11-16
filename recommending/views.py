@@ -1,24 +1,33 @@
 import logging
+import re
 from urllib.parse import urlencode
 
 import kagglehub
-from textblob import TextBlob
+import keras
+import numpy as np
 import pandas as pd
-import torch
 import requests
 from django.conf import settings
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect
+from textblob import TextBlob
+from unidecode import unidecode
 
+from data.model import get_tfidf_and_scaler
 from .models import CustomUser
+
+logging.basicConfig(
+    format='%(asctime)s - %(message)s',
+    level=logging.ERROR
+)
+logger = logging.getLogger(__name__)
+
+STEAM_OPENID_URL = "https://steamcommunity.com/openid/login"
 
 
 def home(request):
     return render(request, 'home.html')
-
-
-STEAM_OPENID_URL = "https://steamcommunity.com/openid/login"
 
 
 def steam_login(request):
@@ -46,9 +55,7 @@ def get_steam_username(steam_id):
         'key': api_key,
         'steamids': steam_id,
     }
-
     response = requests.get(url, params=params)
-
     if response.status_code == 200:
         data = response.json()
         if 'response' in data and 'players' in data['response']:
@@ -67,11 +74,9 @@ def steam_callback(request):
         if created and username:
             user.username = username
             user.save()
-
         backend = 'django.contrib.auth.backends.ModelBackend'
         login(request, user, backend=backend)
         return redirect('get_user_games')
-
     return render(request, 'error.html', {'error': 'Steam login failed.'})
 
 
@@ -87,7 +92,6 @@ def get_user_games(request):
             'format': 'json',
         }
     )
-
     if response.status_code == 200:
         games_data = response.json().get('response', {}).get('games', [])
         game_details = []
@@ -108,35 +112,8 @@ def get_user_games(request):
     return render(request, 'error.html', {'error': 'Unable to retrieve games'})
 
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
 path = kagglehub.dataset_download('artermiloff/steam-games-dataset')
-df = pd.read_csv(path + '/games_may2024_cleaned.csv')
-
-
-def analyze_review_sentiment(review_text):
-    if isinstance(review_text, str):
-        blob = TextBlob(review_text)
-        return blob.sentiment.polarity
-    return 0
-
-
-def get_user_games_data(steam_id):
-    response = requests.get(
-        "http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/",
-        params={
-            'key': settings.STEAM_API_KEY,
-            'steamid': steam_id,
-            'include_appinfo': True,
-            'format': 'json',
-        }
-    )
-
-    if response.status_code == 200:
-        user_games_data = response.json().get('response', {}).get('games', [])
-        return [{'name': game['name'], 'appid': game['appid']} for game in user_games_data]
-    return []
+df = pd.read_csv(path + '/games_may2024_cleaned.csv', encoding='utf-8-sig')
 
 
 def analyze_review_sentiment(review_text):
@@ -154,7 +131,21 @@ def parse_estimated_owners(owner_range):
         return 0
 
 
+def clean_text(text):
+    if isinstance(text, str):
+        text = unidecode(re.sub(r'[^a-zA-Z0-9\s.,!?\'";:-]', '', text))
+    return text
+
+
 def preprocess_data(df):
+    df['short_description'] = df['short_description'].apply(clean_text)
+    df['tags'] = df['tags'].apply(clean_text)
+    df['genres'] = df['genres'].apply(clean_text)
+    df['reviews'] = df['reviews'].apply(clean_text)
+    df['combined_features'] = df['short_description'].fillna('') + " " + df['tags'].fillna('') + " " + df[
+        'genres'].fillna('')
+    df['combined_features'] = df['combined_features'].apply(clean_text)
+    df['score'] = 0
     df['review_sentiment'] = df['reviews'].apply(analyze_review_sentiment)
     df['estimated_owners_processed'] = df['estimated_owners'].apply(parse_estimated_owners)
     return df
@@ -163,87 +154,67 @@ def preprocess_data(df):
 df = preprocess_data(df)
 
 
-def recommend_games(game_name, df, n):
-    game = df[df['name'].str.contains(game_name, case=False, na=False)]
-    if game.empty:
-        return pd.DataFrame()
-
-    genres = game['genres'].values[0].strip("[]").replace("'", "").split(", ")
-    tags = game['tags'].values[0].strip("[]").replace("'", "").split(", ")
-    review_sentiment = game['review_sentiment'].values[0]
-    game_owner_count = game['estimated_owners_processed'].values[0]
-
-    genre_tensor = torch.tensor([1 if genre in genres else 0 for genre in df['genres'].unique()])
-    tag_tensor = torch.tensor([1 if tag in tags else 0 for tag in df['tags'].unique()])
-
-    mask = (df['genres'].apply(lambda x: any(genre in x for genre in genres)) |
-            df['tags'].apply(lambda x: any(tag in x for tag in tags))) & (df['name'] != game_name)
-    recommendations = df[mask].copy()
-
-    if game_owner_count > 0:
-        owners_tensor = torch.tensor(recommendations['estimated_owners_processed'].values)
-        mask = (owners_tensor > game_owner_count * 0.8) & (owners_tensor < game_owner_count * 1.2)
-        recommendations = recommendations[mask.numpy()]
-
-    if review_sentiment > 0:
-        sentiment_tensor = torch.tensor(recommendations['review_sentiment'].values)
-        mask = sentiment_tensor > 0
-    else:
-        sentiment_tensor = torch.tensor(recommendations['review_sentiment'].values)
-        mask = sentiment_tensor < 0
-    recommendations = recommendations[mask.numpy()]
-
-    recommendations = recommendations.sort_values(by='user_score', ascending=False)
-    return recommendations.sample(n)[
-        ['name', 'short_description', 'header_image', 'user_score', 'genres', 'tags', 'AppID', 'estimated_owners',
-         'reviews']]
+def get_keras_model(model_path='./data/model.keras'):
+    model = keras.saving.load_model(model_path)
+    return model
 
 
-def generate_random_recommendations(user_games, df):
-    content_recommendations = []
-
-    for game_data in user_games:
-        game_name = game_data['name']
-        game_recommendations = recommend_games(game_name, df, n=1)
-
-        if not game_recommendations.empty:
-            game_recommendations['cover_url'] = game_recommendations['header_image']
-            content_recommendations.append(game_recommendations)
-
-    if content_recommendations:
-        content_recommendations = pd.concat(content_recommendations).drop_duplicates(subset=['name'])
-        content_recommendations = content_recommendations.sample(frac=1).reset_index(drop=True)
-        content_recommendations = content_recommendations.to_dict(orient='records')
-    else:
-        content_recommendations = []
-
-    return content_recommendations
+def get_user_games_data(steam_id):
+    response = requests.get(
+        "http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/",
+        params={
+            'key': settings.STEAM_API_KEY,
+            'steamid': steam_id,
+            'include_appinfo': True,
+            'format': 'json',
+        }
+    )
+    if response.status_code == 200:
+        user_games_data = response.json().get('response', {}).get('games', [])
+        return [{'name': game['name'], 'appid': game['appid']} for game in user_games_data]
+    return []
 
 
-@login_required
 @login_required
 def recommend_view(request):
     steam_id = request.user.steam_id
-
     user_games = get_user_games_data(steam_id)
 
     if not user_games:
-        # logger.error("Failed to retrieve user games.")
         return render(request, 'error.html', {'error': 'Unable to retrieve games for recommendations'})
 
-    content_recommendations = []
+    recommendations = []
+
     if request.method == 'GET' and 'generate_recommendations' in request.GET:
-        content_recommendations = generate_random_recommendations(user_games, df)
+        model = get_keras_model()
+        tfidf, scaler = get_tfidf_and_scaler(df)
 
-        content_recommendations = content_recommendations[:5]
+        owned_game_names = [game['name'] for game in user_games]
+        filtered_df = df[~df['name'].isin(owned_game_names)]
 
-        if not content_recommendations:
-            # logger.error("No recommendations found.")
-            return render(request, 'error.html', {'error': 'No recommendations available'})
+        combined_features_tfidf = tfidf.transform(filtered_df['combined_features'])
 
-    logger.info(f"Total unique recommendations generated: {len(content_recommendations)}")
+        additional_features = filtered_df[['review_sentiment', 'estimated_owners_processed']].to_numpy()
 
-    return render(request, 'recommendations.html', {
-        'user_games': user_games,
-        'content_recommendations': content_recommendations
-    })
+        game_features = np.hstack([
+            combined_features_tfidf.toarray(),
+            additional_features
+        ])
+
+        game_features_scaled = scaler.transform(game_features)
+
+        predicted_scores = model.predict(game_features_scaled, verbose=0)
+
+        filtered_df['predicted_score'] = predicted_scores
+
+        recommendations = (
+            filtered_df[
+                ['name', 'predicted_score', 'tags', 'genres', 'AppID', 'reviews', 'short_description', 'header_image']]
+            .sort_values('predicted_score', ascending=False)
+            .head(200)
+            .sample(5)
+            .to_dict(orient='records')
+        )
+
+    return render(request, 'recommendations.html',
+                  {'user_games': user_games, 'content_recommendations': recommendations})
